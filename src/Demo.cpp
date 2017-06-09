@@ -1,4 +1,4 @@
-#include "src/uCurses.h"
+#include "uCurses.h"
 #include <unistd.h>
 #include <sstream>
 
