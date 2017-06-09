@@ -3,6 +3,7 @@
 	<name>UltraCurses</name>
 	<comment></comment>
 	<projects>
+		<project>MultiThread</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
