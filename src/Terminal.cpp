@@ -2,32 +2,34 @@
 #include <ncurses.h>
 #include <iostream>
 
+#include <unistd.h>
+
 namespace uc
 {
 
 int Terminal::_Instances = 0;
 Terminal* Terminal::_StdTerminal = 0;
-Terminal* Terminal::_ActiveTerminal = 0;
+mt::Mutex Terminal::_Lock;
 
 Terminal::Terminal()
 {
 	_io = NULL;
-	_TerminalHandle = newterm(0, stdout, stdin);
 	_StdTerminal = this;
 	_TTY = "";
 
-	set_term(_TerminalHandle);
-	SetWindowHandle(stdscr);
+	_Lock.Lock();
+	_TerminalHandle = newterm(0, stdout, stdin);
+	_Lock.UnLock();
 }
 
 Terminal::Terminal(std::string TTY)
 {
 	_io = fopen(TTY.c_str(), "w+");
-	_TerminalHandle = newterm(NULL, _io, _io);
 	_TTY = TTY;
 
-	set_term(_TerminalHandle);
-	SetWindowHandle(stdscr);
+	_Lock.Lock();
+	_TerminalHandle = newterm(NULL, _io, _io);
+	_Lock.UnLock();
 }
 
 Terminal& Terminal::GetStdTerminal()
@@ -51,67 +53,93 @@ Terminal::~Terminal()
 {
 	if (_TerminalHandle)
 	{
-		SetActive();
-		endwin();
-		delscreen(_TerminalHandle);
+		if (FocusAndLock())
+		{
+			endwin();
+			delscreen(_TerminalHandle);
+			Unlock();
+		}
 	}
 
 	if (_io)
 		fclose(_io);
 }
 
-void Terminal::SetActive()
+bool Terminal::WaitForInput(long us)
 {
-	if (_ActiveTerminal != this && _TerminalHandle)
-	{
-		set_term(_TerminalHandle);
-		_ActiveTerminal = this;
-	}
+    fd_set fds;
+    FD_ZERO(&fds);
+
+    if (_io)
+    	FD_SET(_io->_fileno, &fds);
+    else
+    	FD_SET(stdin->_fileno, &fds);
+    struct timeval tv;
+
+    tv.tv_sec = 0;
+    tv.tv_usec = us;
+
+    int status = select(1, &fds, NULL, NULL, &tv);
+
+    if (status == 1)
+    	return true;
+    else
+    	return false;
 }
 
-//void Terminal::WriteChar(const char Out)
-//{
-//	SetActive();
-//	addch(Out);
-//	Refresh();
-//}
-//
-//void Terminal::WriteString(std::string Out)
-//{
-//	SetActive();
-//	addstr(Out.c_str());
-//	Refresh();
-//}
-//
-//std::string Terminal::ReadString()
-//{
-//	static char In[1024];
-//	getstr(In);
-//	return std::string(In);
-//}
-//
-//int Terminal::ReadChar()
-//{
-//	SetActive();
-//	return getch();
-//}
+bool Terminal::FocusAndLock()
+{
+	bool Success = false;
+
+	if (_TerminalHandle)
+	{
+		Success = _Lock.Lock();
+
+		if (Success)
+			set_term(_TerminalHandle);
+	}
+
+	return Success;
+}
+
+void Terminal::Unlock()
+{
+	_Lock.UnLock();
+}
 
 void Terminal::Refresh()
 {
-	SetActive();
-	refresh();
+	if (FocusAndLock())
+	{
+		refresh();
+		Unlock();
+	}
 }
 
 int Terminal::Height()
 {
-	SetActive();
-	return LINES;
+	int Value = 0;
+
+	if (FocusAndLock())
+	{
+		Value = LINES;
+		Unlock();
+	}
+
+	return Value;
 }
 
 int Terminal::Width()
 {
-	SetActive();
-	return COLS;
+	int Value = 0;
+
+	if (FocusAndLock())
+	{
+		Value = COLS;
+		Unlock();
+	}
+
+	return Value;
 }
 
 void Terminal::SaveScreen(std::string SaveName)
@@ -126,21 +154,30 @@ void Terminal::RestoreScreen(std::string SaveName)
 
 void Terminal::ClearScreen()
 {
-	SetActive();
-	clear();
-	Refresh();
+	if (FocusAndLock())
+	{
+		clear();
+		refresh();
+		Unlock();
+	}
 }
 
 void Terminal::Echo(bool On)
 {
-	SetActive();
-	if (On) echo(); else noecho();
+	if (FocusAndLock())
+	{
+		if (On) echo(); else noecho();
+		Unlock();
+	}
 }
 
 void Terminal::CursorVisibility(bool On)
 {
-	SetActive();
-	if (On) curs_set(1); else curs_set(0);
+	if (FocusAndLock())
+	{
+		if (On) curs_set(1); else curs_set(0);
+		Unlock();
+	}
 }
 
 

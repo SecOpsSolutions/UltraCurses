@@ -1,6 +1,7 @@
 # pragma once
 
-#include "IO.h"
+#include "Defines.h"
+#include "Mutex.h"
 #include <string>
 
 // Forward-declarations of ncurses.h
@@ -9,16 +10,18 @@ typedef struct screen SCREEN;
 namespace uc
 {
 
-class Terminal: public IO
+class Terminal
 {
 private:
-	static Terminal* _ActiveTerminal, * _StdTerminal;
+	static Terminal* _StdTerminal;
 	static int _Instances;
+	static mt::Mutex _Lock;
 
 	SCREEN* _TerminalHandle;
 	FILE* _io;
 	std::string _TTY;
 
+protected:
 	Terminal();
 
 public:
@@ -27,7 +30,9 @@ public:
 	Terminal(std::string TTY);
 	~Terminal();
 
-	void SetActive();
+	bool WaitForInput(long us);
+	bool FocusAndLock();
+	void Unlock();
 	void Refresh();
 
 	int Height();

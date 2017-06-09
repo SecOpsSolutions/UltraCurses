@@ -1,10 +1,12 @@
 #pragma once
 
 #include "Defines.h"
+#include "Terminal.h"
 #include <string>
 
 // Forward-declarations of ncurses.h
 typedef struct _win_st WINDOW;
+typedef struct screen SCREEN;
 
 namespace uc
 {
@@ -13,12 +15,11 @@ class IO
 {
 private:
 	WINDOW* _WindowHandle;
-
-protected:
-	void SetWindowHandle(WINDOW* Handle);
+	Terminal* _Terminal;
 
 public:
-	IO();
+	IO(Terminal* Terminal);
+	IO(Terminal* Terminal, WINDOW* WindowHandle);
 	~IO();
 
 	void WriteChar(const char Out, bool Refresh = true);
@@ -32,13 +33,9 @@ public:
 
 	void Flush();
 	int ReadChar();
-	bool ReadCharNoDelay(int* Value);
-	int ReadCharOrKey(int* Value);
-	int ReadCharOrKeyNoDelay(int* Value);
-	std::string ReadString();
-	std::string ReadPassword();
-	IO& operator>>(int& In);
-	IO& operator>>(std::string& In);
+	Key ReadChar(int* Value, bool NonBlocking = false);
+	std::string ReadString(bool NonBlocking = false);
+	std::string ReadPassword(bool NonBlocking = false);
 };
 
 }
