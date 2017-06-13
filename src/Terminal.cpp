@@ -10,15 +10,39 @@ namespace uc
 int Terminal::_Instances = 0;
 Terminal* Terminal::_StdTerminal = 0;
 mt::Mutex Terminal::_Lock;
+Terminal* Terminal::_Locker = 0;
+
+void Terminal::InitializeCurses()
+{
+	start_color();
+	use_default_colors();
+	raw();
+
+	for (int fgc = 0; fgc < 8; fgc++)
+	{
+		for (int bgc = 0; bgc < 8; bgc++)
+			init_pair(((fgc * 8) + bgc), fgc, bgc);
+	}
+
+	for (int fgc = 0; fgc < 8; fgc++)
+		init_pair(65 + fgc, fgc, -1);
+
+	for (int bgc = 0; bgc < 8; bgc++)
+		init_pair(73 + bgc, -1, bgc);
+
+	init_pair(81, -1, -1);
+}
 
 Terminal::Terminal()
 {
 	_io = NULL;
 	_StdTerminal = this;
 	_TTY = "";
+	_Instances++;
 
 	_Lock.Lock();
 	_TerminalHandle = newterm(0, stdout, stdin);
+	InitializeCurses();
 	_Lock.UnLock();
 }
 
@@ -26,9 +50,11 @@ Terminal::Terminal(std::string TTY)
 {
 	_io = fopen(TTY.c_str(), "w+");
 	_TTY = TTY;
+	_Instances++;
 
 	_Lock.Lock();
 	_TerminalHandle = newterm(NULL, _io, _io);
+	InitializeCurses();
 	_Lock.UnLock();
 }
 
@@ -59,6 +85,9 @@ Terminal::~Terminal()
 			delscreen(_TerminalHandle);
 			Unlock();
 		}
+
+		_TerminalHandle = 0;
+		--_Instances;
 	}
 
 	if (_io)
@@ -91,12 +120,17 @@ bool Terminal::FocusAndLock()
 {
 	bool Success = false;
 
-	if (_TerminalHandle)
+	if (_Locker == this)
+		Success = true;
+	else if (_TerminalHandle)
 	{
 		Success = _Lock.Lock();
 
 		if (Success)
+		{
 			set_term(_TerminalHandle);
+			_Locker = this;
+		}
 	}
 
 	return Success;
@@ -104,7 +138,11 @@ bool Terminal::FocusAndLock()
 
 void Terminal::Unlock()
 {
-	_Lock.UnLock();
+	if (_Locker != NULL)
+	{
+		_Lock.UnLock();
+		_Locker = NULL;
+	}
 }
 
 void Terminal::Refresh()

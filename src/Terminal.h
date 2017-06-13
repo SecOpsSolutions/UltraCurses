@@ -4,9 +4,6 @@
 #include "Mutex.h"
 #include <string>
 
-// Forward-declarations of ncurses.h
-typedef struct screen SCREEN;
-
 namespace uc
 {
 
@@ -15,11 +12,15 @@ class Terminal
 private:
 	static Terminal* _StdTerminal;
 	static int _Instances;
+
 	static mt::Mutex _Lock;
+	static Terminal* _Locker;
 
 	SCREEN* _TerminalHandle;
 	FILE* _io;
 	std::string _TTY;
+
+	void InitializeCurses();
 
 protected:
 	Terminal();

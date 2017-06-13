@@ -12,11 +12,19 @@ private:
 	void Run()
 	{
 		uc::Terminal T(_tty);
-		uc::IO io(&T);
-		int i = 5;
-		while (!_RequestStop && i-- > 0)
+		uc::BasicWindow io(&T);
+
+		io.Scroll(true);
+		//io.SetBackground(uc::Color::Magenta);
+		io.EnableColors(uc::Color::Blue, uc::Color::Yellow);
+
+		unsigned long count = 0;
+
+		while (!_RequestStop)
 		{
-			io.WriteString(_tty + "\n");
+			std::stringstream out;
+			out << "[" << count++ << "] " << _tty << "\n";
+			io.WriteString(out.str());
 			TimedWait(_us);
 		}
 		io.WriteString("Thread stop\n");
@@ -24,18 +32,51 @@ private:
 
 public:
 	Worker(std::string tty, long us): Thread()
-	{
+{
 		_tty = tty;
 		_us = us;
-	}
+}
 };
 
 int main()
 {
-	Worker W1("/dev/pts/1", 1000000);
-	Worker W2("/dev/pts/2", 1500000);
+	Worker W1("/dev/pts/1", 750000);
+	Worker W2("/dev/pts/2", 500000);
 
-	uc::IO io(&(uc::Terminal::GetStdTerminal()));
+	uc::BasicWindow io(&(uc::Terminal::GetStdTerminal()));
+
+	// Read standard string from line input
+	io.SetTextBold(true);
+	io.EnableColors(uc::Color::Red, uc::Color::Default);
+	io.WriteString("Input String: ");
+	io.DisableColors();
+	io.SetTextBold(false);
+
+	std::string Input = io.ReadString();
+	io.WriteString("You wrote: '" + Input + "'\n");
+
+	// Read password string from line input
+	io.WriteString("Input Password: ");
+	io.DisableColors();
+
+	io.EnableColors(uc::Color::White, uc::Color::Black);
+	Input.clear();
+	Input = io.ReadPassword();
+	io.DisableColors();
+	io.WriteString("You wrote: '" + Input + "'\n");
+
+	// Read string from input line while echo is disabled (does anyone really need this?)
+	io.EnableColors(uc::Color::Red, uc::Color::Blue);
+	io.WriteString("Input hidden string: ");
+
+	std::string::iterator InputCursorPos = Input.begin();
+	uc::Point StartCursorPos = io.CursorPosition();
+	Input.clear();
+	while(io.ReadLineOrKey(Input, InputCursorPos, StartCursorPos, uc::EchoStatus::Disabled, true) != uc::Key::None) ;
+	io.DisableColors();
+	io.WriteString("You wrote: '" + Input + "'\n");
+
+	// Quit program not before asking for permission like the obidient program we are
 	io.WriteString("Press key to quit... ");
 	int Val;
 	io.ReadChar(&Val);
