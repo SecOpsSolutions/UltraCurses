@@ -1,7 +1,7 @@
 VPATH = ./src
 
 objects = bin/Terminal.o bin/BasicWindow.o
-headers = src/uCurses.h src/Terminal.h src/BasicWindow.h src/Defines.h
+headers = inc/uCurses.h inc/Terminal.h inc/BasicWindow.h inc/Defines.h
 includes = -Iinc/ -I../MultiThread/inc/
 lopts = -Llib/ -lucurses -L../MultiThread/lib/ -lmthreads -lncurses -lpthread
 
@@ -9,13 +9,15 @@ CPP = g++ -c -o $@ $< $(includes)
 
 .PHONY: all
 all: Demo lib/libucurses.a $(headers)
-	cp $(headers) inc/
 
 Demo: Demo.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
 	g++ -o $@ $< $(includes) $(lopts)
 
 run: Demo
 	./Demo
+
+inc/%.h: src/%.h
+	cp $< $@
 
 lib/libucurses.a: $(objects)
 	ar rvs lib/libucurses.a $(objects)

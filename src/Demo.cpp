@@ -43,7 +43,7 @@ int main()
 	Worker W1("/dev/pts/1", 750000);
 	Worker W2("/dev/pts/2", 500000);
 
-	uc::BasicWindow io(&(uc::Terminal::GetStdTerminal()));
+	uc::BasicWindow& io = uc::out();
 
 	// Read standard string from line input
 	io.SetTextBold(true);

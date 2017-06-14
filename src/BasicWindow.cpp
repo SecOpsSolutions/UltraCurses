@@ -8,6 +8,16 @@
 namespace uc
 {
 
+BasicWindow& BasicWindow::GetStdWindow()
+{
+	static BasicWindow* stdout = 0;
+
+	if (stdout == 0)
+		stdout = new BasicWindow(&(Terminal::GetStdTerminal()));
+
+	return *stdout;
+}
+
 BasicWindow::BasicWindow(Terminal* Terminal)
 {
 	_Terminal = Terminal;
@@ -19,8 +29,8 @@ BasicWindow::BasicWindow(Terminal* Terminal)
 
 		_WindowHandle = stdscr;
 		keypad(_WindowHandle, TRUE);
+		_Terminal->Unlock();
 	}
-	_Terminal->Unlock();
 
 	_PosX = 0;
 	_PosY = 0;
@@ -49,10 +59,10 @@ BasicWindow::BasicWindow(Terminal* Terminal, int Height, int Width, int PosX, in
 		if (_PosY > LINES)
 			_PosY = LINES;
 
-		_WindowHandle = newwin(Height, Width, PosX, PosY);
+		_WindowHandle = newwin(Height, Width, PosY, PosX);
 		keypad(_WindowHandle, TRUE);
+		Terminal->Unlock();
 	}
-	Terminal->Unlock();
 
 	_IsStdScr = false;
 	_FgColor = _BgColor = Color::Default;
@@ -342,6 +352,30 @@ void BasicWindow::Flush()
 	}
 }
 
+unsigned long BasicWindow::ReadUnsignedLong()
+{
+	std::string Number = ReadString();
+	return std::stoul(Number);
+}
+
+long BasicWindow::ReadLong()
+{
+	std::string Number = ReadString();
+	return std::stol(Number);
+}
+
+unsigned int BasicWindow::ReadUnsignedInt()
+{
+	std::string Number = ReadString();
+	return std::stoul(Number);
+}
+
+int BasicWindow::ReadInt()
+{
+	std::string Number = ReadString();
+	return std::stoi(Number);
+}
+
 int BasicWindow::ReadChar()
 {
 	int Value = 0;
@@ -426,6 +460,14 @@ Key BasicWindow::ReadLineOrKey(std::string& Input, std::string::iterator& InputC
 		if (_Terminal->FocusAndLock() )
 		{
 			noecho();
+
+			CursorSet(StartOfLine);
+			wclrtoeol(_WindowHandle);
+			CursorSet(StartOfLine);
+			waddstr(_WindowHandle, Input.c_str());
+			CursorSet(StartOfLine.x + std::distance(Input.begin(), InputCursorPos), StartOfLine.y);
+			wrefresh(_WindowHandle);
+
 			_Terminal->Unlock();
 		}
 
@@ -435,13 +477,13 @@ Key BasicWindow::ReadLineOrKey(std::string& Input, std::string::iterator& InputC
 
 			switch (KeyVal)
 			{
-			case KEY_UP:
+			case Up:
 				return Key::Up;
 				break;
-			case KEY_DOWN:
+			case Down:
 				return Key::Down;
 				break;
-			case 9: // KEY_TAB
+			case Tab:
 				return Key::Tab;
 				break;
 			case None:
@@ -549,6 +591,17 @@ Key BasicWindow::ReadLineOrKey(std::string& Input, std::string::iterator& InputC
 	}
 
 	return KeyVal;
+}
+
+std::string BasicWindow::ReadHiddenString(bool Blocking)
+{
+	std::string Input = "";
+	std::string::iterator InputCursorPos = Input.begin();
+	Point StartCursorPos = CursorPosition();
+
+	while(ReadLineOrKey(Input, InputCursorPos, StartCursorPos, Disabled, true) != None) ;
+
+	return Input;
 }
 
 std::string BasicWindow::ReadString(bool Blocking)

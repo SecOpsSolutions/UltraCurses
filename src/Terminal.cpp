@@ -1,12 +1,11 @@
 #include "Terminal.h"
 #include <ncurses.h>
 #include <iostream>
-
+#include <sstream>
 #include <unistd.h>
 
 namespace uc
 {
-
 int Terminal::_Instances = 0;
 Terminal* Terminal::_StdTerminal = 0;
 mt::Mutex Terminal::_Lock;
@@ -96,24 +95,24 @@ Terminal::~Terminal()
 
 bool Terminal::WaitForInput(long us)
 {
-    fd_set fds;
-    FD_ZERO(&fds);
+	fd_set fds;
+	FD_ZERO(&fds);
 
-    if (_io)
-    	FD_SET(_io->_fileno, &fds);
-    else
-    	FD_SET(stdin->_fileno, &fds);
-    struct timeval tv;
+	if (_io)
+		FD_SET(_io->_fileno, &fds);
+	else
+		FD_SET(stdin->_fileno, &fds);
+	struct timeval tv;
 
-    tv.tv_sec = 0;
-    tv.tv_usec = us;
+	tv.tv_sec = 0;
+	tv.tv_usec = us;
 
-    int status = select(1, &fds, NULL, NULL, &tv);
+	int status = select(1, &fds, NULL, NULL, &tv);
 
-    if (status == 1)
-    	return true;
-    else
-    	return false;
+	if (status == 1)
+		return true;
+	else
+		return false;
 }
 
 bool Terminal::FocusAndLock()
@@ -182,12 +181,23 @@ int Terminal::Width()
 
 void Terminal::SaveScreen(std::string SaveName)
 {
-
+	if (FocusAndLock())
+	{
+		scr_dump(SaveName.c_str());
+		Unlock();
+	}
 }
 
 void Terminal::RestoreScreen(std::string SaveName)
 {
+	// TODO: It would be nice to have this function remove the dump-file after restoring.
 
+	if (FocusAndLock())
+	{
+		scr_restore(SaveName.c_str());
+		refresh();
+		Unlock();
+	}
 }
 
 void Terminal::ClearScreen()
