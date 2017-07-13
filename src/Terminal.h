@@ -26,6 +26,7 @@ protected:
 	Terminal();
 
 public:
+	static std::string CreateNewTerminalWindow();
 	static Terminal& GetStdTerminal();
 	static void EndStdTerminal();
 	Terminal(std::string TTY);

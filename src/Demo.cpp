@@ -2,6 +2,8 @@
 #include "Thread.h"
 #include <unistd.h>
 #include <sstream>
+#include <dirent.h>
+#include <set>
 
 class Worker: public mt::Thread
 {
@@ -32,16 +34,18 @@ private:
 
 public:
 	Worker(std::string tty, long us): Thread()
-{
+	{
 		_tty = tty;
 		_us = us;
-}
+	}
 };
 
 int main()
 {
-	Worker W1("/dev/pts/1", 750000);
-	Worker W2("/dev/pts/2", 500000);
+	std::string pty = uc::Terminal::CreateNewTerminalWindow();
+
+	Worker W1(pty, 750000);
+	//Worker W2("/dev/pts/2", 500000);
 
 	uc::BasicWindow& io = uc::out();
 
@@ -82,11 +86,13 @@ int main()
 	io.ReadChar(&Val);
 
 	W1.RequestStop();
-	W2.RequestStop();
+	//W2.RequestStop();
 
 	W1.WaitForStop();
-	W2.WaitForStop();
+	//W2.WaitForStop();
 
 	uc::end();
 }
+
+
 

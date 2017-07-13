@@ -3,6 +3,8 @@
 #include <iostream>
 #include <sstream>
 #include <unistd.h>
+#include <dirent.h>
+#include <set>
 
 namespace uc
 {
@@ -47,6 +49,7 @@ Terminal::Terminal()
 
 Terminal::Terminal(std::string TTY)
 {
+	// TODO: We have to detect an close on the newly created window. If the hijacked terminal window is destroyed outside the program, then the process writing to it should be notified
 	_io = fopen(TTY.c_str(), "w+");
 	_TTY = TTY;
 	_Instances++;
@@ -55,6 +58,55 @@ Terminal::Terminal(std::string TTY)
 	_TerminalHandle = newterm(NULL, _io, _io);
 	InitializeCurses();
 	_Lock.UnLock();
+}
+
+std::string Terminal::CreateNewTerminalWindow()
+{
+	std::string pty = "";
+	DIR* directory;
+	struct dirent* dentry;
+	std::set<std::string> ttys;
+
+	directory = opendir("/dev/pts");
+	if (directory != 0)
+	{
+		while((dentry = readdir(directory)) != 0)
+			ttys.insert(dentry->d_name);
+
+		int pid = fork();
+
+		if (pid == 0)
+		{
+			execlp("gnome-terminal", "gnome-terminal", NULL);
+			exit(0);
+		}
+
+		if (pid != -1)
+		{
+			bool search = true;
+			int steps = 0;
+
+			while (search && steps++ < 10)
+			{
+				usleep(150000);
+				rewinddir(directory);
+
+				while((dentry = readdir(directory)) != 0 && search)
+				{
+					if (ttys.find(dentry->d_name) == ttys.end())
+					{
+						search = false;
+						pty = "/dev/pts/" + std::string(dentry->d_name);
+						usleep(150000);
+					}
+				}
+			}
+		}
+
+		closedir(directory);
+	}
+
+	return pty;
 }
 
 Terminal& Terminal::GetStdTerminal()
