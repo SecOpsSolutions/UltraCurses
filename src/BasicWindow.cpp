@@ -84,8 +84,9 @@ void BasicWindow::Clear()
 	{
 		if (_Terminal->FocusAndLock())
 		{
-			clearok(_WindowHandle, true);
-			wrefresh(_WindowHandle);
+			//clearok(_WindowHandle, true);
+			//wrefresh(_WindowHandle);
+			werase(_WindowHandle);
 			_Terminal->Unlock();
 		}
 	}
