@@ -51,6 +51,7 @@ public:
 	BasicWindow& operator<<(const int Out);
 	BasicWindow& operator<<(const unsigned int Out);
 	BasicWindow& operator<<(const long unsigned int Out);
+	BasicWindow& operator<<(double Out);
 
 	void Flush();
 	unsigned long ReadUnsignedLong();

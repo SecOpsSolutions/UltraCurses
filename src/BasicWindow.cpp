@@ -331,6 +331,18 @@ BasicWindow& BasicWindow::operator<<(const long unsigned int Out)
 	return *this;
 }
 
+BasicWindow& BasicWindow::operator<<(double Out)
+{
+	if (_Terminal && _Terminal->FocusAndLock())
+	{
+		if (_WindowHandle)
+			wprintw(_WindowHandle, "%lf", Out);
+		else
+			printw("%lf", Out);
+	}
+
+	return *this;
+}
 
 void BasicWindow::Flush()
 {
