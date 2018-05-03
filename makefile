@@ -5,13 +5,13 @@ headers = inc/uCurses.h inc/Terminal.h inc/BasicWindow.h inc/Defines.h
 includes = -Iinc/ -I../MultiThread/inc/
 lopts = -Llib/ -lucurses -L../MultiThread/lib/ -lmthreads -lncurses -lpthread
 
-CPP = g++ -c -o $@ $< $(includes)
+CPP = g++ -std=c++11 -c -o $@ $< $(includes)
 
 .PHONY: all
 all: Demo lib/libucurses.a $(headers)
 
 Demo: Demo.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
-	g++ -o $@ $< $(includes) $(lopts)
+	g++ -std=c++11 -o $@ $< $(includes) $(lopts)
 
 run: Demo
 	./Demo
