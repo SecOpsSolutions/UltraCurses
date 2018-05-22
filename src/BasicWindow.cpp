@@ -477,7 +477,11 @@ Key BasicWindow::ReadLineOrKey(std::string& Input, std::string::iterator& InputC
 			CursorSet(StartOfLine);
 			wclrtoeol(_WindowHandle);
 			CursorSet(StartOfLine);
-			waddstr(_WindowHandle, Input.c_str());
+			//waddstr(_WindowHandle, Input.c_str());
+			if (Echo == Enabled)
+				waddstr(_WindowHandle, Input.c_str());
+			else if (Echo == Password)
+				for (int i = 0; i < Input.length(); ++i) waddch(_WindowHandle, '*');
 			CursorSet(StartOfLine.x + std::distance(Input.begin(), InputCursorPos), StartOfLine.y);
 			wrefresh(_WindowHandle);
 

@@ -156,8 +156,8 @@ bool Terminal::WaitForInput(long us)
 		FD_SET(stdin->_fileno, &fds);
 	struct timeval tv;
 
-	tv.tv_sec = 0;
-	tv.tv_usec = us;
+	tv.tv_sec = us / 1000000;
+	tv.tv_usec = us % 1000000;
 
 	int status = select(1, &fds, NULL, NULL, &tv);
 
