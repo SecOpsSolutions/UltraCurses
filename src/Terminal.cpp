@@ -1,4 +1,3 @@
-#include "Terminal.h"
 #include <ncurses.h>
 #include <iostream>
 #include <sstream>
@@ -6,279 +5,257 @@
 #include <dirent.h>
 #include <set>
 
+#include "Terminal.h"
+
 namespace uc
 {
-int Terminal::_Instances = 0;
-Terminal* Terminal::_StdTerminal = 0;
-mt::Mutex Terminal::_Lock;
-Terminal* Terminal::_Locker = 0;
+	int Terminal::_Instances = 0;
+	Terminal* Terminal::_StdTerminal = 0;
+	std::mutex Terminal::_Lock;
+	Terminal* Terminal::_Locker = 0;
 
-void Terminal::InitializeCurses()
-{
-	start_color();
-	use_default_colors();
-	raw();
-
-	for (int fgc = 0; fgc < 8; fgc++)
+	void Terminal::InitializeCurses()
 	{
-		for (int bgc = 0; bgc < 8; bgc++)
-			init_pair(((fgc * 8) + bgc), fgc, bgc);
-	}
+		// enable use of colors in this ncurses-session
+		start_color();
+		
+		// assign terminal default foreground/background colors to color number -1
+		use_default_colors();
+		
+		// characters (including interrupt, quit, suspend and flow control characters)
+		// typed are immediately passed through to the user program
+		raw();
 
-	for (int fgc = 0; fgc < 8; fgc++)
-		init_pair(65 + fgc, fgc, -1);
-
-	for (int bgc = 0; bgc < 8; bgc++)
-		init_pair(73 + bgc, -1, bgc);
-
-	init_pair(81, -1, -1);
-}
-
-Terminal::Terminal()
-{
-	_io = NULL;
-	_StdTerminal = this;
-	_TTY = "";
-	_Instances++;
-
-	_Lock.Lock();
-	_TerminalHandle = newterm(0, stdout, stdin);
-	InitializeCurses();
-	_Lock.UnLock();
-}
-
-Terminal::Terminal(std::string TTY)
-{
-	// TODO: We have to detect an close on the newly created window. If the hijacked terminal window is destroyed outside the program, then the process writing to it should be notified
-	_io = fopen(TTY.c_str(), "w+");
-	_TTY = TTY;
-	_Instances++;
-
-	_Lock.Lock();
-	_TerminalHandle = newterm(NULL, _io, _io);
-	InitializeCurses();
-	_Lock.UnLock();
-}
-
-std::string Terminal::CreateNewTerminalWindow()
-{
-	std::string pty = "";
-	DIR* directory;
-	struct dirent* dentry;
-	std::set<std::string> ttys;
-
-	directory = opendir("/dev/pts");
-	if (directory != 0)
-	{
-		while((dentry = readdir(directory)) != 0)
-			ttys.insert(dentry->d_name);
-
-		int pid = fork();
-
-		if (pid == 0)
+		// color-management is done like the following:
+		// there are 8 basic colors defined in uc::Color (see Defines.h)
+		// ncurses handles colors in pairs (foreground and background)
+		// before any color-pair can be used it has to be initialized with
+		// init_pair(). All theoretical combinations of uc::Color (8*8=64)
+		// in fore- and background will be initialized in advanced here
+		for (int fgc = 0; fgc < 8; fgc++)
 		{
-			execlp("gnome-terminal", "gnome-terminal", NULL);
-			exit(0);
+			for (int bgc = 0; bgc < 8; bgc++)
+				init_pair(((fgc * 8) + bgc), fgc, bgc);
 		}
 
-		if (pid != -1)
+		// there is a 9th color: uc::Color::Default (value -1) which is 
+		// whatever color it was before. E.g. if one want to set only the
+		// foreground color without knowing about the current background
+		// color he would use one of the pairs between 73 and 81
+
+		// Initialize all combinations with default as background-color
+		for (int fgc = 0; fgc < 8; fgc++)
+			init_pair(65 + fgc, fgc, -1);
+
+		// Initialize all combinations with default as foreground-color
+		for (int bgc = 0; bgc < 8; bgc++)
+			init_pair(73 + bgc, -1, bgc);
+
+		// Initialize default color-pair with value 81
+		init_pair(81, -1, -1);
+	}
+
+	Terminal::Terminal()
+	{
+		// at some point in the future there might be a constructor which
+		// takes a tty for a different terminal-hosting process which
+		// can be set here. For now the only instance allowed is the one
+		// for the calling process. Hence this is a singleton constructor
+		_StdTerminal = this;
+
+		// to prevent some race-condition or else issues in a multithreaded
+		// environment the first call will lock the mutex before initializing
+		// ncurses
+		_Lock.lock();
+		_TerminalHandle = newterm(0, stdout, stdin);
+		InitializeCurses();
+		_Lock.unlock();
+	}
+
+	Terminal& Terminal::GetStdTerminal()
+	{
+		// already initialized? --> don't initialize twice, instead
+		// use the already set up instance
+		if (!_StdTerminal)
+			_StdTerminal = new Terminal();
+
+		return *_StdTerminal;
+	}
+
+	void Terminal::EndStdTerminal()
+	{
+		if (!_StdTerminal)
+			return;
+
+		delete _StdTerminal;
+		_StdTerminal = NULL;
+	}
+
+	Terminal::~Terminal()
+	{
+		if (_TerminalHandle)
 		{
-			bool search = true;
-			int steps = 0;
-
-			while (search && steps++ < 10)
+			if (FocusAndLock())
 			{
-				usleep(150000);
-				rewinddir(directory);
+				endwin();
+				delscreen(_TerminalHandle);
+				Unlock();
+			}
 
-				while((dentry = readdir(directory)) != 0 && search)
-				{
-					if (ttys.find(dentry->d_name) == ttys.end())
-					{
-						search = false;
-						pty = "/dev/pts/" + std::string(dentry->d_name);
-						usleep(150000);
-					}
-				}
+			_TerminalHandle = 0;
+		}
+	}
+
+	bool Terminal::WaitForInput(long us)
+	{
+		// this rather complex snippet for simply waiting some time
+		// will return not only once the time (us) run out, but also
+		// if something is happening on the input (stdin). This way
+		// applications could wait for user-input, but only for a
+		// given time before they do something else
+
+		fd_set fds;
+		FD_ZERO(&fds);
+
+		FD_SET(stdin->_fileno, &fds);
+		struct timeval tv;
+
+		tv.tv_sec = us / 1000000;
+		tv.tv_usec = us % 1000000;
+
+		int status = select(1, &fds, NULL, NULL, &tv);
+
+		return (status == 1);
+	}
+
+	bool Terminal::FocusAndLock()
+	{
+		bool Success = false;
+
+		if (_Locker == this)
+			Success = true;
+		else if (_TerminalHandle)
+		{
+			Success = _Lock.try_lock();
+
+			if (Success)
+			{
+				// for the current implementation setting focus is not
+				// really necessary since there is only one instance of
+				// a ncurses-terminal (the one which is bound to the 
+				// calling terminal-process). One possible future enhance-
+				// ment might be the support for multiple terminal-
+				// instances (on different terminal-hosting processes).
+				// to support this either in a multi- or single-threaded 
+				// environment this set_term call together with locking
+				// a mutex is key.
+				set_term(_TerminalHandle);
+				_Locker = this;
 			}
 		}
 
-		closedir(directory);
+		return Success;
 	}
 
-	return pty;
-}
+	void Terminal::Unlock()
+	{
+		if (_Locker != NULL)
+		{
+			_Lock.unlock();
+			_Locker = NULL;
+		}
+	}
 
-Terminal& Terminal::GetStdTerminal()
-{
-	if (!_StdTerminal)
-		_StdTerminal = new Terminal();
-
-	return *_StdTerminal;
-}
-
-void Terminal::EndStdTerminal()
-{
-	if (!_StdTerminal)
-		return;
-
-	delete _StdTerminal;
-	_StdTerminal = NULL;
-}
-
-Terminal::~Terminal()
-{
-	if (_TerminalHandle)
+	void Terminal::Refresh()
 	{
 		if (FocusAndLock())
 		{
-			endwin();
-			delscreen(_TerminalHandle);
+			// this call will render all the modifications on the
+			// terminal output done since the last refresh()
+			refresh();
+			Unlock();
+		}
+	}
+
+	int Terminal::Height()
+	{
+		int Value = 0;
+
+		if (FocusAndLock())
+		{
+			// the variable LINES is supported in ncurses and will
+			// return the current amount of lines in the focussed 
+			// terminal
+			Value = LINES;
 			Unlock();
 		}
 
-		_TerminalHandle = 0;
-		--_Instances;
+		return Value;
 	}
 
-	if (_io)
-		fclose(_io);
-}
-
-bool Terminal::WaitForInput(long us)
-{
-	fd_set fds;
-	FD_ZERO(&fds);
-
-	if (_io)
-		FD_SET(_io->_fileno, &fds);
-	else
-		FD_SET(stdin->_fileno, &fds);
-	struct timeval tv;
-
-	tv.tv_sec = us / 1000000;
-	tv.tv_usec = us % 1000000;
-
-	int status = select(1, &fds, NULL, NULL, &tv);
-
-	if (status == 1)
-		return true;
-	else
-		return false;
-}
-
-bool Terminal::FocusAndLock()
-{
-	bool Success = false;
-
-	if (_Locker == this)
-		Success = true;
-	else if (_TerminalHandle)
+	int Terminal::Width()
 	{
-		Success = _Lock.Lock();
+		int Value = 0;
 
-		if (Success)
+		if (FocusAndLock())
 		{
-			set_term(_TerminalHandle);
-			_Locker = this;
+			// the variable COLS is supported in ncurses and will
+			// return the current amount of columns in the focussed 
+			// terminal
+			Value = COLS;
+			Unlock();
+		}
+
+		return Value;
+	}
+
+	void Terminal::SaveScreen(std::string SaveName)
+	{
+		if (FocusAndLock())
+		{
+			scr_dump(SaveName.c_str());
+			Unlock();
 		}
 	}
 
-	return Success;
-}
-
-void Terminal::Unlock()
-{
-	if (_Locker != NULL)
+	void Terminal::RestoreScreen(std::string SaveName)
 	{
-		_Lock.UnLock();
-		_Locker = NULL;
-	}
-}
+		// TODO: It would be nice to have this function remove the dump-file after restoring.
 
-void Terminal::Refresh()
-{
-	if (FocusAndLock())
-	{
-		refresh();
-		Unlock();
-	}
-}
-
-int Terminal::Height()
-{
-	int Value = 0;
-
-	if (FocusAndLock())
-	{
-		Value = LINES;
-		Unlock();
+		if (FocusAndLock())
+		{
+			scr_restore(SaveName.c_str());
+			refresh();
+			Unlock();
+		}
 	}
 
-	return Value;
-}
-
-int Terminal::Width()
-{
-	int Value = 0;
-
-	if (FocusAndLock())
+	void Terminal::ClearScreen()
 	{
-		Value = COLS;
-		Unlock();
+		if (FocusAndLock())
+		{
+			clear();
+			refresh();
+			Unlock();
+		}
 	}
 
-	return Value;
-}
-
-void Terminal::SaveScreen(std::string SaveName)
-{
-	if (FocusAndLock())
+	void Terminal::Echo(bool On)
 	{
-		scr_dump(SaveName.c_str());
-		Unlock();
+		if (FocusAndLock())
+		{
+			if (On) echo(); else noecho();
+			Unlock();
+		}
 	}
-}
 
-void Terminal::RestoreScreen(std::string SaveName)
-{
-	// TODO: It would be nice to have this function remove the dump-file after restoring.
-
-	if (FocusAndLock())
+	void Terminal::CursorVisibility(bool On)
 	{
-		scr_restore(SaveName.c_str());
-		refresh();
-		Unlock();
+		if (FocusAndLock())
+		{
+			if (On) curs_set(1); else curs_set(0);
+			Unlock();
+		}
 	}
-}
-
-void Terminal::ClearScreen()
-{
-	if (FocusAndLock())
-	{
-		clear();
-		refresh();
-		Unlock();
-	}
-}
-
-void Terminal::Echo(bool On)
-{
-	if (FocusAndLock())
-	{
-		if (On) echo(); else noecho();
-		Unlock();
-	}
-}
-
-void Terminal::CursorVisibility(bool On)
-{
-	if (FocusAndLock())
-	{
-		if (On) curs_set(1); else curs_set(0);
-		Unlock();
-	}
-}
-
 
 }

@@ -1,52 +1,12 @@
-#include "uCurses.h"
-#include "Thread.h"
 #include <unistd.h>
 #include <sstream>
 #include <dirent.h>
 #include <set>
 
-class Worker: public mt::Thread
-{
-private:
-	std::string _tty;
-	long _us;
-
-	void Run()
-	{
-		uc::Terminal T(_tty);
-		uc::BasicWindow io(&T);
-
-		io.Scroll(true);
-		//io.SetBackground(uc::Color::Magenta);
-		io.EnableColors(uc::Color::Blue, uc::Color::Yellow);
-
-		unsigned long count = 0;
-
-		while (!_RequestStop)
-		{
-			std::stringstream out;
-			out << "[" << count++ << "] " << _tty << "\n";
-			io.WriteString(out.str());
-			TimedWait(_us);
-		}
-		io.WriteString("Thread stop\n");
-	}
-
-public:
-	Worker(std::string tty, long us): Thread()
-	{
-		_tty = tty;
-		_us = us;
-	}
-};
+#include "uCurses.h"
 
 int main()
-{
-	std::string pty = uc::Terminal::CreateNewTerminalWindow();
-
-	Worker W1(pty, 750000);
-	//Worker W2("/dev/pts/2", 500000);
-
+{	
 	uc::BasicWindow& io = uc::out();
 
 	// Read standard string from line input
@@ -85,14 +45,5 @@ int main()
 	int Val;
 	io.ReadChar(&Val);
 
-	W1.RequestStop();
-	//W2.RequestStop();
-
-	W1.WaitForStop();
-	//W2.WaitForStop();
-
 	uc::end();
 }
-
-
-

@@ -1,4 +1,7 @@
-Demo
+bin/*
+obj/*
+inc/*
+lib/*
 .project
 .cproject
 .settings

@@ -1,36 +1,45 @@
 VPATH = ./src
 
-objects = bin/Terminal.o bin/BasicWindow.o
+binaries = bin/
+objects = obj/Terminal.o obj/BasicWindow.o
 headers = inc/uCurses.h inc/Terminal.h inc/BasicWindow.h inc/Defines.h
-includes = -Iinc/ -I../MultiThread/inc/
-lopts = -Llib/ -lucurses -L../MultiThread/lib/ -lmthreads -lncurses -lpthread
+includes = -Iinc/
+lopts = -Llib/ -lucurses -lncurses
 
 CPP = g++ -std=c++11 -c -o $@ $< $(includes)
 
 .PHONY: all
-all: Demo lib/libucurses.a $(headers)
+all: lib/libucurses.a $(headers) bin/demo bin/snake
 
-Demo: Demo.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
+bin/% : test/%.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
+	@-mkdir -p bin
 	g++ -std=c++11 -o $@ $< $(includes) $(lopts)
 
-run: Demo
-	./Demo
+# bin/demo: test/demo.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
+# 	g++ -std=c++11 -o $@ $< $(includes) $(lopts)
+
+# bin/snake: test/snake.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
+# 	g++ -std=c++11 -o $@ $< $(includes) $(lopts)
 
 inc/%.h: src/%.h
+	@-mkdir -p inc
 	cp $< $@
 
 lib/libucurses.a: $(objects)
+	@-mkdir -p lib/
 	ar rvs lib/libucurses.a $(objects)
 
-bin/Terminal.o: Terminal.cpp Terminal.h Defines.h
+obj/Terminal.o: Terminal.cpp Terminal.h Defines.h
+	@-mkdir -p obj
 	$(CPP)
 
-bin/BasicWindow.o: BasicWindow.cpp BasicWindow.h Defines.h
+obj/BasicWindow.o: BasicWindow.cpp BasicWindow.h Defines.h Terminal.h
+	@-mkdir -p obj
 	$(CPP)
 
 .PHONY: clean
 clean:
 	rm -rf bin/* 
-	rm -f Demo
+	rm -rf obj/*
 	rm -rf lib/*
 	rm -rf inc/*
