@@ -15,12 +15,6 @@ bin/% : test/%.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
 	@-mkdir -p bin
 	g++ -std=c++11 -o $@ $< $(includes) $(lopts)
 
-# bin/demo: test/demo.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
-# 	g++ -std=c++11 -o $@ $< $(includes) $(lopts)
-
-# bin/snake: test/snake.cpp lib/libucurses.a Terminal.h BasicWindow.h Defines.h
-# 	g++ -std=c++11 -o $@ $< $(includes) $(lopts)
-
 inc/%.h: src/%.h
 	@-mkdir -p inc
 	cp $< $@
